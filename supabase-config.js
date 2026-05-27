@@ -55,6 +55,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 window.SUPABASE_CONFIG = {
-  url:     "REPLACE_WITH_YOUR_PROJECT_URL",   // ex: https://xxxxx.supabase.co
-  anonKey: "REPLACE_WITH_YOUR_ANON_KEY"       // ex: eyJhbGci... (token longo)
+  url:     "https://ppagjuytugpomkjjhcpx.supabase.co",   // ex: https://xxxxx.supabase.co
+  anonKey: ""       // ex: eyJhbGci... (token longo)
 };
