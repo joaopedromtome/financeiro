@@ -1,7 +1,7 @@
 const MESES = ["","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const COLORS = ["#e91e8c","#9c27b0","#00bcd4","#64b5f6","#ffb74d","#a5d6a7","#f48fb1","#ce93d8","#80cbc4","#ffcc80","#ef9a9a","#b39ddb"];
 
-function R(n){return "R$ "+Math.abs(+n||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
+function R(n){var v=+n||0;var s=v<0?"-":"";return s+"R$ "+Math.abs(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function getDefaultMonth(){return{receitas:[],fixas:[],variaveis:[],extras:[]};}
 
@@ -34,27 +34,37 @@ function getStatus(calc,theme){
   if(tRec===0&&tDesp===0){
     return{level:"empty",imgKey:imgs.empty,title:imgs.titleEmpty,sub:imgs.subEmpty,health:0,pctDisplay:0,alerts:[]};
   }
-  // health = quanto da renda ficou de saldo (0–100%)
-  // base: saldo / receita * 100, mas capped e ajustado pelo orçamento
-  var healthBase=tRec>0?Math.max(0,(saldo/tRec)*100):0;
-  var healthOrc=calc.orc>0?Math.max(0,100-pct):50; // quanto do orçamento sobrou
+
+  // ── SAÚDE FINANCEIRA: cálculo contínuo (0–100) ──
+  // Base: taxa de poupança (saldo / receita), normalizada para 0..100
+  //   saldo = receita inteira (sem despesa) → 100
+  //   saldo = 0 (receita = despesa)        → 50
+  //   saldo = -receita (despesa = 2×rec.)   → 0
+  // Sem receita: saúde = 0 (só tem despesa).
+  var savingsRate;
+  if(tRec>0){
+    savingsRate=Math.max(-1,Math.min(1,saldo/tRec));
+  }else{
+    savingsRate=-1;
+  }
+  var h=50+savingsRate*50;
+  // Penalidade extra se estourou o orçamento
+  if(calc.orc>0&&pct>100){
+    h-=Math.min(15,(pct-100)*0.3);
+  }
+  h=Math.max(0,Math.min(100,h));
 
   if(saldo>=0&&pct<=75){
-    var h=Math.min(100,50+healthBase*0.5);
     return{level:"great",imgKey:imgs.great,title:imgs.titleGreat,sub:imgs.subGreat+" ("+Math.round(pct)+"% usado)",health:h,pctDisplay:Math.round(pct),alerts:alerts};
   }
   if(saldo>=0&&pct<=100){
-    var h=Math.min(70,20+healthBase*0.5);
     return{level:"ok",imgKey:imgs.ok,title:imgs.titleOk,sub:imgs.subOk+" ("+Math.round(pct)+"% usado)",health:h,pctDisplay:Math.round(pct),alerts:alerts};
   }
   if(saldo>=0){
     var over=pct-100;
-    var h=Math.max(5,30-over*0.3);
     return{level:"warn",imgKey:imgs.warn,title:imgs.titleWarn,sub:imgs.subWarn+" (+"+Math.round(over)+"% acima)",health:h,pctDisplay:Math.round(pct),alerts:alerts};
   }
   // Saldo negativo
-  var deficit=tRec>0?Math.abs(saldo)/tRec*100:100;
-  var h=Math.max(0,15-deficit*0.1);
   return{level:"bad",imgKey:imgs.bad,title:imgs.titleBad,sub:imgs.subBad+" (déficit "+R(Math.abs(saldo))+")",health:h,pctDisplay:Math.round(pct)||0,alerts:alerts};
 }
 

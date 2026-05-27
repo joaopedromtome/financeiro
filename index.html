@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Final Boss 🎀</title>
+<title>Meu Plano Financeiro 🎀</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Fredoka+One&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="imgs.js"></script>
@@ -769,6 +769,11 @@ table.tx tr:hover td{background:rgba(0,0,0,.02);}
         <button class="btn-act" id="bAddMeta" onclick="addMeta()">🎯 Criar Meta</button>
       </div>
       <div class="metas-grid" id="metasGrid"></div>
+      <div id="metasDoneWrap" style="display:none;margin-top:22px;">
+        <h3 style="font-family:'Fredoka One',cursive;font-size:16px;color:#2d2d2d;margin-bottom:10px;display:flex;align-items:center;gap:8px;">🏆 Metas Concluídas <span id="metasDoneCount" style="font-size:11px;font-weight:800;background:#fff3e0;color:#ef6c00;padding:3px 9px;border-radius:10px;font-family:'Nunito',sans-serif;">0</span></h3>
+        <p style="font-size:12px;color:#8892a4;margin-bottom:10px;">Conquistas realizadas — você chegou lá! 🎉</p>
+        <div class="metas-grid" id="metasDoneGrid"></div>
+      </div>
     </div>
 
     <!-- ANÁLISES -->
@@ -1491,7 +1496,7 @@ function buildTxRecent(d){
   d.fixas.forEach(function(x){rows.push({ico:"📌",desc:x.desc,cat:x.cat,tipo:"Fixa",status:x.status,val:"-"+R(+x.pago||+x.plan),cls:"tv-d"});});
   d.variaveis.filter(function(x){return +x.gasto>0;}).forEach(function(x){rows.push({ico:"🔄",desc:x.desc,cat:x.cat,tipo:"Variável",status:x.status,val:"-"+R(x.gasto),cls:"tv-d"});});
   d.extras.forEach(function(x){rows.push({ico:"⭐",desc:x.desc,cat:"Extra",tipo:"Extra",status:x.status,val:"-"+R(x.val),cls:"tv-d"});});
-  aportes.filter(function(a){return +a.mes===+curMes;}).forEach(function(a){var m=metas.find(function(mm){return mm.id===a.metaId;});rows.push({ico:"🎯",desc:"Aporte: "+(m?m.nome:"meta"),cat:"Metas",tipo:"Aporte",status:"pago",val:"-"+R(a.val),cls:"tv-d"});});
+  aportes.filter(function(a){return +a.mes===+curMes;}).forEach(function(a){var m=metas.find(function(mm){return mm.id===a.metaId;});var isRet=(+a.val<0)||a.retirada;if(isRet){rows.push({ico:"↩️",desc:"Retirada: "+(m?m.nome:"meta"),cat:"Metas",tipo:"Retirada",status:"pago",val:"+"+R(Math.abs(a.val)),cls:"tv-r"});}else{rows.push({ico:"🎯",desc:"Aporte: "+(m?m.nome:"meta"),cat:"Metas",tipo:"Aporte",status:"pago",val:"-"+R(a.val),cls:"tv-d"});}});
   // Pagamento dos cartões: fatura do mês anterior cai como gasto neste mês
   var _cardDue=cardDueIn(curMes);
   if(_cardDue>0)rows.push({ico:"💳",desc:"Pagamento de cartões",cat:"Cartões",tipo:"Fatura de "+MESES[prevMes(curMes)],status:"pendente",val:"-"+R(_cardDue),cls:"tv-d"});
@@ -1627,6 +1632,7 @@ function renderCt(){var grid=Q("ctGrid");if(!cartoes.length){grid.innerHTML='<di
 function addMeta(){var n=Q("mN").value.trim(),t=parseFloat(Q("mT").value)||0,a=parseFloat(Q("mA").value)||0,i=Q("mI").value,p=Q("mP").value;if(!n||!t){toast("⚠️ Preencha nome e valor!");return;}var metaId=uid();metas.push({id:metaId,nome:n,total:t,atual:a,ico:i,prazo:p});if(a>0)aportes.push({id:uid(),metaId:metaId,mes:curMes,val:a,date:new Date().toISOString().split("T")[0]});save();Q("mN").value="";Q("mT").value="";Q("mA").value="";Q("mP").value="";renderMetas();buildMetasMini();refreshAll();toast(a>0?"✅ Meta criada — "+R(a)+" registrado em "+MESES[curMes]+"!":"✅ Meta criada!");}
 function aporteMeta(id){
   var m=metas.find(function(x){return x.id===id;});if(!m)return;
+  if(m.done){toast("🏆 Meta já concluída!");return;}
   var room=Math.max(0,(+m.total||0)-(+m.atual||0));
   if(room<=0){toast("🎯 Meta já está completa!");return;}
   appPrompt({
@@ -1650,6 +1656,68 @@ function aporteMeta(id){
     toast("💰 "+R(v)+" aportado em "+MESES[curMes]+"!");
   });
 }
+function retirarMeta(id){
+  var m=metas.find(function(x){return x.id===id;});if(!m)return;
+  if(m.done){toast("🏆 Meta já concluída — não dá pra retirar!");return;}
+  var saved=+m.atual||0;
+  if(saved<=0){toast("💸 Não há saldo nesta meta!");return;}
+  appPrompt({
+    title:"💸 Retirar de "+m.nome,
+    icon:"💸",
+    message:'Quanto você quer retirar desta meta em <strong>'+MESES[curMes]+'</strong>?<br>O valor volta para o caixa do mês.<br><br>Disponível: <strong>'+R(saved)+'</strong>',
+    placeholder:"0,00",
+    type:"number",
+    step:"0.01",
+    min:"0",
+    max:String(saved),
+    ok:"💸 Retirar"
+  }).then(function(res){
+    if(res==null)return;
+    var v=parseFloat((res+"").replace(",","."));
+    if(!v||v<=0)return;
+    if(v>saved)v=saved;
+    m.atual=Math.max(0,saved-v);
+    // aporte negativo = retirada (devolve ao caixa do mês)
+    aportes.push({id:uid(),metaId:id,mes:curMes,val:-v,date:new Date().toISOString().split("T")[0],retirada:true});
+    save();renderMetas();buildMetasMini();refreshAll();
+    toast("💸 "+R(v)+" retirado de "+m.nome+"!");
+  });
+}
+function concluirMeta(id){
+  var m=metas.find(function(x){return x.id===id;});if(!m)return;
+  if(m.done){toast("🏆 Já concluída!");return;}
+  var pct=+m.total>0?Math.round((+m.atual||0)/(+m.total)*100):0;
+  appConfirm({
+    title:"Concluir meta?",
+    icon:"🏆",
+    message:'Marcar <strong>"'+m.nome+'"</strong> como conquistada? 🎉<br><br>'
+      +'Você acumulou <strong>'+R(m.atual||0)+'</strong> de '+R(m.total||0)+' ('+pct+'%).'
+      +'<br><br>Ela vai para a seção <strong>Metas Concluídas</strong> e não receberá mais aportes.',
+    ok:"🏆 Concluir"
+  }).then(function(yes){
+    if(!yes)return;
+    m.done=true;
+    m.doneDate=new Date().toISOString().split("T")[0];
+    m.doneMes=curMes;
+    m.doneVal=+m.atual||0;
+    save();renderMetas();buildMetasMini();refreshAll();
+    toast("🏆 Meta \""+m.nome+"\" concluída! Parabéns!");
+  });
+}
+function reabrirMeta(id){
+  var m=metas.find(function(x){return x.id===id;});if(!m)return;
+  appConfirm({
+    title:"Reabrir meta?",
+    icon:"↩️",
+    message:'Reabrir <strong>"'+m.nome+'"</strong>? Ela volta para a lista ativa e poderá receber novos aportes.',
+    ok:"↩️ Reabrir"
+  }).then(function(yes){
+    if(!yes)return;
+    delete m.done;delete m.doneDate;delete m.doneMes;delete m.doneVal;
+    save();renderMetas();buildMetasMini();refreshAll();
+    toast("↩️ Meta \""+m.nome+"\" reaberta!");
+  });
+}
 function delMeta(id){
   var m=metas.find(function(x){return x.id===id;});if(!m)return;
   var aps=aportes.filter(function(a){return a.metaId===id;});
@@ -1667,10 +1735,75 @@ function delMeta(id){
     toast("🗑️ Meta excluída!");
   });
 }
-function renderMetas(){var grid=Q("metasGrid");if(!grid)return;if(!metas.length){grid.innerHTML='<div class="panel" style="grid-column:1/-1;text-align:center;padding:32px;"><div style="font-size:36px;margin-bottom:8px;">🎯</div><div style="font-size:13px;color:#aaa;font-weight:700;">Nenhuma meta criada</div></div>';return;}grid.innerHTML=metas.map(function(m){var p=+m.total>0?Math.round(+m.atual/+m.total*100):0;var aptMes=aportes.filter(function(a){return a.metaId===m.id&&+a.mes===+curMes;}).reduce(function(s,a){return s+(+a.val||0);},0);var aptAll=aportes.filter(function(a){return a.metaId===m.id;}).reduce(function(s,a){return s+(+a.val||0);},0);return'<div class="meta-card"><div class="meta-head"><span style="font-size:32px;">'+m.ico+'</span><div style="flex:1"><div style="font-size:14px;font-weight:900;font-family:\'Fredoka One\',cursive;color:'+T.primary+';">'+m.nome+'</div>'+(m.prazo?'<div style="font-size:11px;color:#8892a4;">Prazo: '+m.prazo+'</div>':"")+('</div><span style="font-size:20px;font-weight:900;color:'+T.primary+';">'+p+'%</span></div>')+'<div class="meta-bar-bg"><div class="meta-bar-fill" style="width:'+p+'%;background:linear-gradient(90deg,'+T.primary+','+T.secondary+');"></div></div><div style="font-size:11.5px;color:#8892a4;margin-bottom:4px;">'+R(m.atual)+' de '+R(m.total)+' acumulado</div><div style="font-size:10.5px;color:'+(aptMes>0?T.primary:"#b0aab5")+';font-weight:'+(aptMes>0?"900":"700")+';margin-bottom:10px;">'+(aptMes>0?"💸 Aportado em "+MESES[curMes]+": "+R(aptMes):"Sem aportes em "+MESES[curMes])+'</div><div style="display:flex;gap:8px;"><button class="btn-act" style="font-size:12px;padding:7px 14px;background:'+T.primary+';" onclick="aporteMeta(\''+m.id+'\')">💰 Aportar</button><button class="btn-del" style="padding:7px 14px;font-size:12px;" onclick="delMeta(\''+m.id+'\')">✕ Remover</button></div></div>';}).join("");if(Q("bAddMeta"))Q("bAddMeta").style.background=T.primary;}
+function renderMetas(){
+  var grid=Q("metasGrid");if(!grid)return;
+  var doneWrap=Q("metasDoneWrap"),doneGrid=Q("metasDoneGrid"),doneCount=Q("metasDoneCount");
+
+  var active=metas.filter(function(m){return !m.done;});
+  var done=metas.filter(function(m){return !!m.done;});
+
+  // ── ATIVAS ──
+  if(!active.length){
+    grid.innerHTML='<div class="panel" style="grid-column:1/-1;text-align:center;padding:32px;"><div style="font-size:36px;margin-bottom:8px;">🎯</div><div style="font-size:13px;color:#aaa;font-weight:700;">'+(metas.length?"Nenhuma meta ativa — confira as concluídas abaixo 👇":"Nenhuma meta criada")+'</div></div>';
+  }else{
+    grid.innerHTML=active.map(function(m){
+      var p=+m.total>0?Math.round((+m.atual||0)/+m.total*100):0;
+      var aptMes=aportes.filter(function(a){return a.metaId===m.id&&+a.mes===+curMes;}).reduce(function(s,a){return s+(+a.val||0);},0);
+      var saved=+m.atual||0;
+      var canWithdraw=saved>0;
+      var aptLabel="";
+      if(aptMes>0)aptLabel='<div style="font-size:10.5px;color:'+T.primary+';font-weight:900;margin-bottom:10px;">💸 Aportado em '+MESES[curMes]+': '+R(aptMes)+'</div>';
+      else if(aptMes<0)aptLabel='<div style="font-size:10.5px;color:#e53935;font-weight:900;margin-bottom:10px;">↩️ Retirado em '+MESES[curMes]+': '+R(Math.abs(aptMes))+'</div>';
+      else aptLabel='<div style="font-size:10.5px;color:#b0aab5;font-weight:700;margin-bottom:10px;">Sem movimentação em '+MESES[curMes]+'</div>';
+      return '<div class="meta-card">'
+        +'<div class="meta-head"><span style="font-size:32px;">'+m.ico+'</span>'
+        +'<div style="flex:1"><div style="font-size:14px;font-weight:900;font-family:\'Fredoka One\',cursive;color:'+T.primary+';">'+m.nome+'</div>'
+        +(m.prazo?'<div style="font-size:11px;color:#8892a4;">Prazo: '+m.prazo+'</div>':"")
+        +'</div><span style="font-size:20px;font-weight:900;color:'+T.primary+';">'+p+'%</span></div>'
+        +'<div class="meta-bar-bg"><div class="meta-bar-fill" style="width:'+Math.min(100,p)+'%;background:linear-gradient(90deg,'+T.primary+','+T.secondary+');"></div></div>'
+        +'<div style="font-size:11.5px;color:#8892a4;margin-bottom:4px;">'+R(m.atual||0)+' de '+R(m.total)+' acumulado</div>'
+        +aptLabel
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+          +'<button class="btn-act" style="font-size:11.5px;padding:7px 12px;background:'+T.primary+';" onclick="aporteMeta(\''+m.id+'\')">💰 Aportar</button>'
+          +'<button class="btn-act" style="font-size:11.5px;padding:7px 12px;background:'+(canWithdraw?"#ff9800":"#e0d8e3")+';'+(canWithdraw?"":"opacity:.55;cursor:not-allowed;")+'" '+(canWithdraw?'onclick="retirarMeta(\''+m.id+'\')"':'disabled title="Sem saldo para retirar"')+'>💸 Retirar</button>'
+          +'<button class="btn-act" style="font-size:11.5px;padding:7px 12px;background:#43a047;" onclick="concluirMeta(\''+m.id+'\')">🏆 Concluído</button>'
+          +'<button class="btn-del" style="padding:7px 12px;font-size:11.5px;" onclick="delMeta(\''+m.id+'\')">✕ Remover</button>'
+        +'</div></div>';
+    }).join("");
+  }
+
+  // ── CONCLUÍDAS ──
+  if(done.length){
+    doneWrap.style.display="block";
+    doneCount.textContent=done.length;
+    doneGrid.innerHTML=done.map(function(m){
+      var dd=m.doneDate?m.doneDate.split("-").reverse().join("/"):"";
+      var totalApt=aportes.filter(function(a){return a.metaId===m.id;}).reduce(function(s,a){return s+(+a.val||0);},0);
+      var finalVal=(m.doneVal!=null)?(+m.doneVal||0):(+m.atual||0);
+      return '<div class="meta-card" style="background:linear-gradient(145deg,#fff,#fff8e1);border:2px solid #ffd54f;position:relative;overflow:hidden;">'
+        +'<div style="position:absolute;top:10px;right:12px;font-size:11px;font-weight:900;background:#ffd54f;color:#5d4037;padding:3px 10px;border-radius:10px;font-family:\'Nunito\',sans-serif;">🏆 CONCLUÍDA</div>'
+        +'<div class="meta-head" style="margin-top:14px;"><span style="font-size:32px;filter:drop-shadow(0 3px 8px rgba(255,193,7,.45));">'+m.ico+'</span>'
+        +'<div style="flex:1"><div style="font-size:14px;font-weight:900;font-family:\'Fredoka One\',cursive;color:#5d4037;">'+m.nome+'</div>'
+        +'<div style="font-size:11px;color:#8892a4;">'+(dd?"Conquistada em "+dd+(m.doneMes?" · "+MESES[+m.doneMes]:""):"Conquistada")+'</div>'
+        +'</div></div>'
+        +'<div class="meta-bar-bg"><div class="meta-bar-fill" style="width:100%;background:linear-gradient(90deg,#ffb300,#ff8f00);"></div></div>'
+        +'<div style="font-size:11.5px;color:#6d4c41;font-weight:800;margin-bottom:4px;">🎯 '+R(finalVal)+' alcançado · meta de '+R(m.total)+'</div>'
+        +'<div style="font-size:10.5px;color:#a1887f;margin-bottom:10px;">Total aportado: '+R(Math.max(0,totalApt))+'</div>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+          +'<button class="btn-act" style="font-size:11.5px;padding:7px 12px;background:#6d4c41;" onclick="reabrirMeta(\''+m.id+'\')">↩️ Reabrir</button>'
+          +'<button class="btn-del" style="padding:7px 12px;font-size:11.5px;" onclick="delMeta(\''+m.id+'\')">✕ Remover</button>'
+        +'</div></div>';
+    }).join("");
+  }else{
+    doneWrap.style.display="none";
+    doneGrid.innerHTML="";
+  }
+
+  if(Q("bAddMeta"))Q("bAddMeta").style.background=T.primary;
+}
 
 // ── ANÁLISES ──
-function renderAnalises(){var c=calcMes(store,curMes,config.orcamento,aportes,cardDueIn(curMes)),d=c.d;var cats=getCatBreakdown(d,aportes,curMes,c.tCard);buildBarChart(Q("acCat"),cats,function(i){return COLORS[i%COLORS.length];});buildBarChart(Q("acTipo"),[{label:"Fixas",val:c.tFix},{label:"Variáveis",val:c.tVar},{label:"Extras",val:c.tExt},{label:"Metas 🎯",val:c.tApt||0},{label:"Cartões 💳",val:c.tCard||0}].filter(function(x){return x.val>0;}),function(i){return[T.primary,T.secondary,T.accent||"#64b5f6","#9c27b0","#ff7043"][i];});var items=[];d.fixas.forEach(function(x){items.push({label:x.desc,val:+x.pago||+x.plan});});d.variaveis.filter(function(x){return +x.gasto>0;}).forEach(function(x){items.push({label:x.desc,val:+x.gasto});});aportes.filter(function(a){return +a.mes===+curMes;}).forEach(function(a){var m=metas.find(function(mm){return mm.id===a.metaId;});items.push({label:(m?"🎯 "+m.nome:"🎯 Aporte"),val:+a.val});});buildBarChart(Q("acItem"),items.sort(function(a,b){return b.val-a.val;}).slice(0,8),function(i){return COLORS[i%COLORS.length];});if(charts.rd)charts.rd.destroy();
+function renderAnalises(){var c=calcMes(store,curMes,config.orcamento,aportes,cardDueIn(curMes)),d=c.d;var cats=getCatBreakdown(d,aportes,curMes,c.tCard);buildBarChart(Q("acCat"),cats,function(i){return COLORS[i%COLORS.length];});buildBarChart(Q("acTipo"),[{label:"Fixas",val:c.tFix},{label:"Variáveis",val:c.tVar},{label:"Extras",val:c.tExt},{label:"Metas 🎯",val:c.tApt||0},{label:"Cartões 💳",val:c.tCard||0}].filter(function(x){return x.val>0;}),function(i){return[T.primary,T.secondary,T.accent||"#64b5f6","#9c27b0","#ff7043"][i];});var items=[];d.fixas.forEach(function(x){items.push({label:x.desc,val:+x.pago||+x.plan});});d.variaveis.filter(function(x){return +x.gasto>0;}).forEach(function(x){items.push({label:x.desc,val:+x.gasto});});aportes.filter(function(a){return +a.mes===+curMes&&+a.val>0;}).forEach(function(a){var m=metas.find(function(mm){return mm.id===a.metaId;});items.push({label:(m?"🎯 "+m.nome:"🎯 Aporte"),val:+a.val});});buildBarChart(Q("acItem"),items.sort(function(a,b){return b.val-a.val;}).slice(0,8),function(i){return COLORS[i%COLORS.length];});if(charts.rd)charts.rd.destroy();
   // Formatação dos valores no eixo Y
   var yFmt=function(v){
     if(v>=1000000)return "R$ "+(v/1000000).toLocaleString("pt-BR",{maximumFractionDigits:1})+"M";
